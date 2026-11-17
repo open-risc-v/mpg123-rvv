@@ -42,6 +42,35 @@ if [ "$dry" -eq 1 ]; then
   exit 0
 fi
 
+# 发行包直链（.tar.* / .zip）走下载+解包；git 仓库才 clone。
+# 上游只在 release tarball 上给出固定版本时（mpg123 就是这种），这条分支才跑得通。
+U=${URL%/}
+case "$U" in
+  *.tar.gz|*.tgz|*.tar.bz2|*.tar.xz|*.tar.Z|*.zip)
+    if [ -f "$BASE/.tarball-url" ] && [ "$(cat "$BASE/.tarball-url")" = "$U" ]; then
+      echo "== $BASE 已解包且 URL 未变，跳过"
+      exit 0
+    fi
+    TMP=$(mktemp -d)
+    echo "== 下载 $U"
+    curl -fL --retry 3 --connect-timeout 20 -o "$TMP/pkg.tar" "$U"
+    mkdir -p "$TMP/x"
+    tar -xf "$TMP/pkg.tar" -C "$TMP/x" 2>/dev/null || unzip -q "$TMP/pkg.tar" -d "$TMP/x"
+    N=$(ls "$TMP/x" | wc -l)
+    TOP=$(ls "$TMP/x" | head -1)
+    rm -rf "$BASE"
+    if [ "$N" -eq 1 ] && [ -d "$TMP/x/$TOP" ]; then
+      mv "$TMP/x/$TOP" "$BASE"
+    else
+      mv "$TMP/x" "$BASE"
+    fi
+    echo "$U" > "$BASE/.tarball-url"
+    echo "== baseline 解包完成：$BASE"
+    rm -rf "$TMP"
+    exit 0
+    ;;
+esac
+
 if [ -d "$BASE/.git" ]; then
   echo "== $BASE 已存在，仅校验 HEAD"
   git -C "$BASE" fetch --depth 1 origin "${SHA:-$TAG}" 2>/dev/null || true

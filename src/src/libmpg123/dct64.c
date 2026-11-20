@@ -18,6 +18,9 @@
  */
 
 #include "mpg123lib_intern.h"
+#if defined(RVV_KERNELS) && defined(__riscv_v)
+#include "riscv/dct64_rvv.h"
+#endif
 
 void INT123_dct64(real *out0,real *out1,real *samples)
 {
@@ -33,10 +36,15 @@ void INT123_dct64(real *out0,real *out1,real *samples)
   costab = INT123_pnts[0]+16;
   b2 = b1 + 32;
 
+#if defined(RVV_KERNELS) && defined(__riscv_v) && !defined(REAL_IS_FIXED)
+  mpg_dct64_first_rvv(bufs, samples, INT123_pnts[0]);
+  bs = bufs + 32;
+#else
   for(i=15;i>=0;i--)
     *bs++ = (*b1++ + *--b2); 
   for(i=15;i>=0;i--)
     *bs++ = REAL_MUL((*--b2 - *b1++), *--costab);
+#endif
 
   b1 = bufs;
   costab = INT123_pnts[1]+8;
